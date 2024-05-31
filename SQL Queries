@@ -1,0 +1,243 @@
+/*
+Question #1: What are the unique states values available in the customer data? Count the number of customers associated to each state.
+
+Expected columns: state, total_customers
+*/
+
+-- q1 solution:
+
+SELECT 
+  DISTINCT(state),
+  COUNT (customer_id) AS num_of_customers
+FROM customers
+GROUP BY DISTINCT(state);
+
+
+
+
+/*
+Question #2: 
+Question #2: 
+It looks like the state data is not 100% clean and your manager already one issue:
+(1) We have a value called “US State” which doesn’t make sense.
+
+After a careful investigation your manager concluded that the “US State” customers should be assigned to California.
+
+What is the total number of orders that have been completed for every state? Only include orders for which customer data is available.
+
+Expected columns: clean_state, total_completed_orders
+*/
+
+-- q2 solution:
+
+select
+	distinct(replace(customers.state, 'US State', 'California')) AS clean_state,
+  count(orders.order_id) as total_completed_orders 
+from customers
+left join orders on customers.customer_id=orders.user_id
+where orders.status ='Complete'
+group by  clean_state;
+
+/*
+Question #3: 
+After excluding some orders since the customer information was not available, your 
+manager gets back to and stresses what we can never presented a number that is missing 
+any orders even if our customer data is bad.
+
+What is the total number of orders, number of Nike Official orders, and number of Nike Vintage
+orders that are completed by every state?
+
+If customer data is missing, you can assign the records to ‘Missing Data’.
+Expected columns: clean_state, total_completed_orders, 
+official_completed_orders, vintage_completed_orders
+*/
+
+-- q3 solution:
+select
+		coalesce (replace(customers.state, 'US State', 'California'),'Missing Data') AS clean_state,
+  	count(distinct(orders.order_id) )as total_completed_orders,
+    count (distinct(order_items.order_id)) as Nike_Official_orders,
+    count (distinct(order_items_vintage.order_id)) as Vintage_Official_orders
+  from orders
+full join customers on customers.customer_id=orders.user_id
+left join order_items on order_items.order_id=orders.order_id
+left join order_items_vintage on order_items_vintage.order_id=orders.order_id
+where orders.status ='Complete'
+group by clean_state;
+
+
+/*Question #4: 
+When reviewing sales performance, there is one metric we can never forget; revenue. 
+
+Reuse the query you created in question 3 and add the revenue (aggregate of the sales price) to your table: 
+(1) Total revenue for the all orders (not just the completed!)
+
+Expected columns: clean_state, total_completed_orders, official_completed_orders, vintage_completed_orders, total_revenue
+*/
+
+-- q4 solution:
+
+with combined_revenue as(
+ select
+  	coalesce (replace(state, 'US State', 'California'),'Missing Data') AS clean_state,
+  	sum(sale_price) AS revenue
+	from order_items
+	full join customers ON order_items.user_id = customers.customer_id
+	group by(clean_state)
+  
+	union all
+  
+ 	select
+  	coalesce (replace(state, 'US State', 'California'),'Missing Data') AS clean_state,
+  	sum(sale_price) AS revenue
+	from order_items_vintage
+	full join customers ON order_items_vintage.user_id = customers.customer_id
+	group by clean_state),
+
+  final_table as(
+   select
+		coalesce (replace(customers.state, 'US State', 'California'),'Missing Data') AS clean_state,
+  	count(distinct(orders.order_id) )as total_completed_orders,
+    count (distinct(order_items.order_id)) as Nike_Official_orders,
+    count (distinct(order_items_vintage.order_id)) as Vintage_Official_orders	
+  from orders
+	full join customers on customers.customer_id=orders.user_id
+	left join order_items on order_items.order_id=orders.order_id
+	left join order_items_vintage on order_items_vintage.order_id=orders.order_id
+	full join products on order_items.product_id=products.product_id
+	where orders.status ='Complete'
+	group by clean_state)
+  
+	select 
+    final_table.clean_state,
+    final_table.total_completed_orders,
+    final_table.Nike_Official_orders,
+    final_table.Vintage_Official_orders,
+    sum(combined_revenue.revenue) as total_revenue
+    from final_table
+    full join combined_revenue on final_table.clean_state=Combined_revenue.clean_state
+    group by 1,2,3,4;
+
+/*
+Question #5: The leadership team is also interested in understanding the number of order items that get returned. 
+
+Reuse the query of question 4 and add an additional metric to the table: 
+(1) Number of order items that have been returned (items where the return date is populated)
+
+Expected columns: clean_state, total_completed_orders, official_completed_orders, vintage_completed_orders, total_revenue,returned_items
+*/
+
+-- q5 solution:
+with combined_revenue as(
+ select
+  	coalesce (replace(state, 'US State', 'California'),'Missing Data') AS clean_state,
+  	sum(sale_price) AS revenue,
+  	count(returned_at) AS returned_items
+	from order_items
+	full join customers ON order_items.user_id = customers.customer_id
+	group by(clean_state)
+  
+	union all
+  
+ 	select
+  	coalesce (replace(state, 'US State', 'California'),'Missing Data') AS clean_state,
+  	sum(sale_price) AS revenue,
+  	count(returned_at) AS returned_items
+	from order_items_vintage
+	full join customers ON order_items_vintage.user_id = customers.customer_id
+	group by clean_state),
+
+  final_table as(
+   select
+		coalesce (replace(customers.state, 'US State', 'California'),'Missing Data') AS clean_state,
+  	count(distinct(orders.order_id) )as total_completed_orders,
+    count (distinct(order_items.order_id)) as Nike_Official_orders,
+    count (distinct(order_items_vintage.order_id)) as Vintage_Official_orders	
+  from orders
+	full join customers on customers.customer_id=orders.user_id
+	left join order_items on order_items.order_id=orders.order_id
+	left join order_items_vintage on order_items_vintage.order_id=orders.order_id
+	full join products on order_items.product_id=products.product_id
+	where orders.status ='Complete'
+	group by clean_state)
+  
+	select 
+    final_table.clean_state,
+    final_table.total_completed_orders,
+    final_table.Nike_Official_orders,
+    final_table.Vintage_Official_orders,
+    sum(combined_revenue.revenue) as total_revenue,
+    sum(combined_revenue.returned_items) as returned_items
+    from final_table
+    full join combined_revenue on final_table.clean_state=Combined_revenue.clean_state
+    group by 1,2,3,4;
+
+
+/*
+Question #6: 
+When looking at the number of returned items by itself, 
+it is hard to understand what number of returned items is acceptable. This is mainly caused by the fact that we don’t have a 
+benchmark at the moment.
+Because of that, it is valuable to add an additional metric that looks at the percentage of 
+returned order items divided by the total order items, we can call this the return rate.
+Reuse the query of question 5 and integrate the return rate into your table.
+Expected columns: clean_state, total_completed_orders, official_completed_orders,
+vintage_completed_orders, total_revenue,returned_items,return_rate*/
+
+*/
+
+-- q6 solution:
+WITH combined_revenue AS (
+  SELECT
+    COALESCE(REPLACE(state, 'US State', 'California'), 'Missing Data') AS clean_state,
+    SUM(sale_price) AS revenue,
+    COUNT(returned_at) AS returned_items,
+    COUNT(order_items.order_id) AS total_orders
+  FROM order_items
+  FULL JOIN customers ON order_items.user_id = customers.customer_id
+  GROUP BY clean_state
+
+  UNION ALL
+
+  SELECT
+    COALESCE(REPLACE(state, 'US State', 'California'), 'Missing Data') AS clean_state,
+    SUM(sale_price) AS revenue,
+    COUNT(returned_at) AS returned_items,
+    COUNT(order_items_vintage.order_id) AS total_orders
+  FROM order_items_vintage
+  FULL JOIN customers ON order_items_vintage.user_id = customers.customer_id
+  GROUP BY clean_state
+),
+
+final_table AS (
+  SELECT
+    COALESCE(REPLACE(customers.state, 'US State', 'California'), 'Missing Data') AS clean_state,
+    COUNT(DISTINCT orders.order_id) AS total_completed_orders,
+    COUNT(DISTINCT order_items.order_id) AS Nike_Official_orders,
+    COUNT(DISTINCT order_items_vintage.order_id) AS Vintage_Official_orders
+  FROM orders
+  FULL JOIN customers ON customers.customer_id = orders.user_id
+  LEFT JOIN order_items ON order_items.order_id = orders.order_id
+  LEFT JOIN order_items_vintage ON order_items_vintage.order_id = orders.order_id
+  FULL JOIN products ON order_items.product_id = products.product_id
+  WHERE orders.status ='Complete'
+  GROUP BY clean_state
+)
+
+SELECT
+  final_table.clean_state,
+  final_table.total_completed_orders,
+  final_table.Nike_Official_orders,
+  final_table.Vintage_Official_orders,
+  SUM(combined_revenue.revenue) AS total_revenue,
+  SUM(combined_revenue.returned_items) AS returned_items,
+  SUM(combined_revenue.returned_items) / SUM(combined_revenue.total_orders) AS return_rate
+FROM final_table
+FULL JOIN combined_revenue ON final_table.clean_state = combined_revenue.clean_state
+GROUP BY 1, 2, 3, 4;
+
+
+
+
+
+
